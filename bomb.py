@@ -29,12 +29,6 @@ def main():
         timeout = float(input("Enter timeout in seconds: ").strip())
     except ValueError:
         timeout = 3.0
-
-    # Aggressive bounds
-    request_count = max(1, min(request_count, 100000))
-    thread_count = max(1, min(thread_count, 2000))
-    timeout = max(0.2, min(timeout, 30.0))
-
     success = 0
     failed = 0
     completed = 0
