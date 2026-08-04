@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-BoomBench (safe edition)
-A fun, resilient CLI for polite load testing of systems you own or are authorized to test.
+S.M.T.H.
+Send Me To Heaven
+A CLI-only benchmark utility for systems you own or are authorized to test.
 """
 
 from __future__ import annotations
@@ -39,19 +40,18 @@ class ModeConfig:
     timeout_cap: float
 
 
-# Per-mode defaults + individual caps (your requested "limits for all modes")
 MODES = {
     "good": ModeConfig(
-        name="Good Boy Mode 🐶",
+        name="GOOD MODE",
         requests_default=300,
         threads_default=30,
         timeout_default=3.0,
-        requests_cap=300,   # URL-only mode
+        requests_cap=300,
         threads_cap=30,
         timeout_cap=3.0,
     ),
     "pro": ModeConfig(
-        name="Pro Mode 🛠️",
+        name="PRO MODE",
         requests_default=2000,
         threads_default=120,
         timeout_default=5.0,
@@ -60,7 +60,7 @@ MODES = {
         timeout_cap=20.0,
     ),
     "god": ModeConfig(
-        name="God Mode ⚡ (still safe + authorized use only)",
+        name="GOD MODE",
         requests_default=8000,
         threads_default=250,
         timeout_default=8.0,
@@ -71,24 +71,35 @@ MODES = {
 }
 
 
+# ------------------------------ UI helpers ------------------------------
+
+ASCII_BANNER = r"""
+  ____  __  __ _____ _   _ __  __ 
+ / ___||  \/  |_   _| | | |  \/  |
+ \___ \| |\/| | | | | | | | |\/| |
+  ___) | |  | | | | | |_| | |  | |
+ |____/|_|  |_| |_|  \___/|_|  |_|
+"""
+
+
+def print_banner() -> None:
+    print(ASCII_BANNER)
+    print("S.M.T.H.  |  Send Me To Heaven")
+    print("CLI-only  |  Authorized targets only\n")
+
+
 # ------------------------------ Parsing helpers ------------------------------
 
 _INT_RE = re.compile(r"^[+-]?\d+$")
 
 
 def parse_huge_int(text: str, *, field_name: str) -> int:
-    """
-    Robust integer parser:
-    - Accepts very large integers
-    - Rejects invalid data safely
-    """
     s = (text or "").strip().replace("_", "")
     if not s:
         raise ValueError(f"{field_name}: empty input")
     if not _INT_RE.match(s):
         raise ValueError(f"{field_name}: not a valid integer")
-    value = int(s, 10)  # Python int is arbitrary precision
-    return value
+    return int(s, 10)
 
 
 def parse_float(text: str, *, field_name: str) -> float:
@@ -121,6 +132,7 @@ def validate_url(url: str) -> str:
 
 # ------------------------------ Core test logic ------------------------------
 
+
 def fetch_url(session: requests.Session, url: str, timeout: float) -> Tuple[bool, Optional[int], str]:
     try:
         response = session.get(url, timeout=timeout)
@@ -138,12 +150,14 @@ def run_test(target_url: str, request_count: int, thread_count: int, timeout: fl
     lock = threading.Lock()
     start_time = time.time()
 
-    print("\n🚀 Starting test...")
-    print(f"   URL      : {target_url}")
-    print(f"   Requests : {request_count}")
-    print(f"   Threads  : {thread_count}")
-    print(f"   Timeout  : {timeout:.2f}s")
-    print("   (Authorized testing only)\n")
+    print("\n+------------------------------------------------+")
+    print("|              STARTING S.M.T.H. TEST            |")
+    print("+------------------------------------------------+")
+    print(f" URL      : {target_url}")
+    print(f" Requests : {request_count}")
+    print(f" Threads  : {thread_count}")
+    print(f" Timeout  : {timeout:.2f}s")
+    print(" Authorized testing only\n")
 
     with requests.Session() as session:
         adapter = requests.adapters.HTTPAdapter(
@@ -193,14 +207,17 @@ def run_test(target_url: str, request_count: int, thread_count: int, timeout: fl
 
     total_time = time.time() - start_time
     avg_rps = (request_count / total_time) if total_time > 0 else 0.0
-    print("\n\n✅ Finished")
-    print(f"   Total time : {total_time:.2f}s")
-    print(f"   Avg RPS    : {avg_rps:.2f}")
-    print(f"   Success    : {success}")
-    print(f"   Failed     : {failed}")
+    print("\n\n+------------------------------------------------+")
+    print("|                   FINISHED                     |")
+    print("+------------------------------------------------+")
+    print(f" Total time : {total_time:.2f}s")
+    print(f" Avg RPS    : {avg_rps:.2f}")
+    print(f" Success    : {success}")
+    print(f" Failed     : {failed}")
 
 
 # ------------------------------ Interactive UX ------------------------------
+
 
 def ask(prompt: str) -> str:
     try:
@@ -211,9 +228,9 @@ def ask(prompt: str) -> str:
 
 def choose_mode() -> str:
     print("Choose your mode:")
-    print("  1) Good Boy Mode 🐶  (URL only, safe defaults)")
-    print("  2) Pro Mode 🛠️       (custom params, safe caps)")
-    print("  3) God Mode ⚡        (higher caps, still safety-limited)")
+    print("  1) GOOD MODE  - URL only, safe defaults")
+    print("  2) PRO MODE   - custom params, safe caps")
+    print("  3) GOD MODE   - higher caps, still bounded")
     raw = ask("Enter 1/2/3 [default: 1]: ").strip() or "1"
     return {"1": "good", "2": "pro", "3": "god"}.get(raw, "good")
 
@@ -221,7 +238,7 @@ def choose_mode() -> str:
 def read_params_interactive() -> Tuple[str, int, int, float]:
     mode_key = choose_mode()
     mode = MODES[mode_key]
-    print(f"\n🎛️  {mode.name}")
+    print(f"\nMODE: {mode.name}")
 
     default_url = "https://example.com"
     while True:
@@ -229,7 +246,7 @@ def read_params_interactive() -> Tuple[str, int, int, float]:
             target_url = validate_url(ask(f"Target URL [{default_url}]: ").strip() or default_url)
             break
         except ValueError as e:
-            print(f"❌ {e}")
+            print(f"[!] {e}")
 
     if mode_key == "good":
         return target_url, mode.requests_default, mode.threads_default, mode.timeout_default
@@ -243,42 +260,40 @@ def read_params_interactive() -> Tuple[str, int, int, float]:
         thr_val = parse_huge_int(thr_raw, field_name="threads")
         tout_val = parse_float(tout_raw, field_name="timeout")
     except ValueError as e:
-        print(f"⚠️  Bad input: {e}. Falling back to mode defaults.")
+        print(f"[!] Bad input: {e}. Falling back to mode defaults.")
         return target_url, mode.requests_default, mode.threads_default, mode.timeout_default
 
     if req_val <= 0:
-        print("⚠️  requests must be > 0. Using default.")
+        print("[!] requests must be > 0. Using default.")
         req_val = mode.requests_default
     if thr_val <= 0:
-        print("⚠️  threads must be > 0. Using default.")
+        print("[!] threads must be > 0. Using default.")
         thr_val = mode.threads_default
     if tout_val <= 0:
-        print("⚠️  timeout must be > 0. Using default.")
+        print("[!] timeout must be > 0. Using default.")
         tout_val = mode.timeout_default
 
-    # Apply per-mode caps first
     req = clamp_int(req_val, 1, mode.requests_cap)
     thr = clamp_int(thr_val, 1, mode.threads_cap)
     tout = clamp_float(tout_val, MIN_TIMEOUT, mode.timeout_cap)
 
-    # Enforce absolute caps as final safeguard
     req = clamp_int(req, 1, ABS_MAX_REQUESTS)
     thr = clamp_int(thr, 1, ABS_MAX_THREADS)
     tout = clamp_float(tout, MIN_TIMEOUT, ABS_MAX_TIMEOUT)
 
     if req != req_val:
-        print(f"ℹ️  requests clamped to {req}")
+        print(f"[i] requests clamped to {req}")
     if thr != thr_val:
-        print(f"ℹ️  threads clamped to {thr}")
+        print(f"[i] threads clamped to {thr}")
     if tout != tout_val:
-        print(f"ℹ️  timeout clamped to {tout}")
+        print(f"[i] timeout clamped to {tout}")
 
     return target_url, req, thr, tout
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="BoomBench: safe, robust HTTP load tester (authorized targets only)."
+        description="S.M.T.H.: CLI-only HTTP benchmark utility (authorized targets only)."
     )
     parser.add_argument("--mode", choices=["good", "pro", "god"], help="Run non-interactively with a mode.")
     parser.add_argument("--url", help="Target URL (http/https).")
@@ -323,8 +338,7 @@ def resolve_noninteractive(args: argparse.Namespace) -> Tuple[str, int, int, flo
 
 
 def main() -> int:
-    print("💣 BoomBench (Safe Edition)")
-    print("   Funny CLI. Serious safety rules.\n")
+    print_banner()
 
     args = parse_args()
     try:
@@ -337,19 +351,19 @@ def main() -> int:
         else:
             target_url, request_count, thread_count, timeout = read_params_interactive()
     except ValueError as e:
-        print(f"❌ Config error: {e}")
+        print(f"[x] Config error: {e}")
         return 2
     except KeyboardInterrupt:
-        print("\n🛑 Cancelled by user.")
+        print("\n[x] Cancelled by user.")
         return 130
 
     try:
         run_test(target_url, request_count, thread_count, timeout)
     except KeyboardInterrupt:
-        print("\n🛑 Stopped early by user.")
+        print("\n[x] Stopped early by user.")
         return 130
     except Exception as e:
-        print(f"\n❌ Unexpected runtime error: {e}")
+        print(f"\n[x] Unexpected runtime error: {e}")
         return 1
 
     return 0
