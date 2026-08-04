@@ -1,13 +1,15 @@
-﻿import requests
+import requests
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def fetch_url(url: str, timeout: int):
+def fetch_url(session: requests.Session, url: str, timeout: float):
     try:
-        response = requests.get(url, timeout=timeout)
-        return url, response.status_code, response.text[:200]
+        response = session.get(url, timeout=timeout)
+        return True, response.status_code, response.text[:120]
     except requests.exceptions.RequestException as e:
-        return url, None, str(e)
+        return False, None, str(e)[:120]
 
 
 def main():
@@ -16,39 +18,82 @@ def main():
     try:
         request_count = int(input("Enter the number of requests: ").strip())
     except ValueError:
-        request_count = 20
+        request_count = 2000
 
     try:
         thread_count = int(input("Enter the thread count: ").strip())
     except ValueError:
-        thread_count = 4
+        thread_count = 200
 
     try:
-        timeout = int(input("Enter timeout in seconds: ").strip())
+        timeout = float(input("Enter timeout in seconds: ").strip())
     except ValueError:
-        timeout = 5
+        timeout = 3.0
 
-    request_count = max(1, min(request_count, 5000))
-    thread_count = max(1, min(thread_count, 100))
-
-    print(f"Sending {request_count} requests to {target_url} using {thread_count} thread(s)...")
+    # Aggressive bounds
+    request_count = max(1, min(request_count, 100000))
+    thread_count = max(1, min(thread_count, 2000))
+    timeout = max(0.2, min(timeout, 30.0))
 
     success = 0
     failed = 0
+    completed = 0
+    in_flight = 0
+    last_status = 0
+    lock = threading.Lock()
 
-    with ThreadPoolExecutor(max_workers=thread_count) as executor:
-        futures = [executor.submit(fetch_url, target_url, timeout) for _ in range(request_count)]
+    start_time = time.time()
 
-        for future in as_completed(futures):
-            _, status_code, content = future.result()
-            if status_code == 200:
-                success += 1
-                print(f"OK -> {status_code}")
-            else:
-                failed += 1
-                print(f"FAIL -> {status_code}: {content[:120]}")
+    with requests.Session() as session:
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=thread_count,
+            pool_maxsize=thread_count
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
 
-    print(f"Completed. Success={success}, Failed={failed}")
+        def task():
+            nonlocal in_flight
+            with lock:
+                in_flight += 1
+            ok, status_code, content = fetch_url(session, target_url, timeout)
+            with lock:
+                in_flight -= 1
+            return ok, status_code, content
+
+        with ThreadPoolExecutor(max_workers=thread_count) as executor:
+            futures = [executor.submit(task) for _ in range(request_count)]
+
+            for future in as_completed(futures):
+                ok, status_code, _ = future.result()
+
+                with lock:
+                    completed += 1
+                    if ok and status_code and 200 <= status_code < 400:
+                        success += 1
+                        last_status = status_code
+                    else:
+                        failed += 1
+                        last_status = status_code if status_code is not None else 0
+
+                    progress = (completed / request_count) * 100
+                    elapsed = time.time() - start_time
+                    rps = completed / elapsed if elapsed > 0 else 0.0
+
+                    line = (
+                        f"ok {last_status} || "
+                        f"request_count {completed}/{request_count} || "
+                        f"progress {progress:.5f}% || "
+                        f"success {success} || failed {failed} || "
+                        f"in_flight {in_flight} || rps {rps:.2f}"
+                    )
+
+                    # single-line auto-updating output
+                    print("\r" + line.ljust(140), end="", flush=True)
+
+    total_time = time.time() - start_time
+    print()  # final newline once at end
+    print(f"Completed in {total_time:.2f}s | Avg RPS {(request_count / total_time) if total_time > 0 else 0:.2f}")
 
 
 if __name__ == "__main__":
